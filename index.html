@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>systemd 配置生成器</title>
+<style>
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#c9d1d9;--text2:#8b949e;--accent:#58a6ff;--accent2:#1f6feb;--green:#3fb950;--key:#ff7b72;--val:#79c0ff;--sec:#7ee787;--cmt:#8b949e}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.header h1{font-size:20px;font-weight:600}
+.header .sub{color:var(--text2);font-size:13px}
+.header .spacer{flex:1}
+.lang-btn{padding:4px 12px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text2);cursor:pointer;font-size:12px;transition:all .15s}
+.lang-btn:hover{border-color:var(--accent);color:var(--accent)}
+.layout{display:flex;height:calc(100vh - 61px)}
+.sidebar{width:200px;min-width:200px;background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;padding:8px 0}
+.sidebar .nav-item{padding:10px 20px;cursor:pointer;font-size:14px;color:var(--text2);border-left:3px solid transparent;transition:all .15s;display:flex;align-items:center;gap:8px}
+.sidebar .nav-item:hover{color:var(--text);background:#1c2128}
+.sidebar .nav-item.active{color:var(--accent);background:#0d1a2e;border-left-color:var(--accent);font-weight:500}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.panels{flex:1;overflow-y:auto;padding:20px 24px}
+.panel{display:none}
+.panel.active{display:block}
+.panel h2{font-size:16px;font-weight:600;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.form-row{margin-bottom:12px}
+.form-row label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px;font-weight:500}
+.form-row label .hint{color:var(--text2);font-weight:400;font-size:12px}
+input,select,textarea{width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px;font-family:"Cascadia Code","Fira Code","JetBrains Mono",monospace;font-size:12px}
+select{cursor:pointer}
+.check-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.check-row input[type="checkbox"]{width:auto;accent-color:var(--accent)}
+.env-list{margin-top:4px}
+.env-item{display:flex;gap:8px;margin-bottom:6px}
+.env-item input{flex:1}
+.env-item .btn-del{width:32px;padding:0;cursor:pointer;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--red);font-size:16px}
+.env-item .btn-del:hover{background:#2d1b1e}
+.btn-add{padding:6px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--accent);cursor:pointer;font-size:13px;transition:all .15s}
+.btn-add:hover{background:var(--accent2);color:#fff}
+.preview{border-top:1px solid var(--border);background:var(--bg2);padding:0}
+.preview-header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--bg3);border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap}
+.preview-header .title{font-size:13px;font-weight:600}
+.preview-header .title .fn{color:var(--accent);font-family:monospace}
+.preview-actions{display:flex;gap:8px;flex-wrap:wrap}
+.preview-actions button{padding:4px 14px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;transition:all .15s}
+.preview-actions button:hover{border-color:var(--accent);color:var(--accent)}
+.preview-actions button.copy:hover{border-color:var(--green);color:var(--green)}
+.preview-actions button.dl:hover{border-color:var(--accent);color:var(--accent)}
+.preview-actions button.reset:hover{border-color:var(--red);color:var(--red)}
+.preview-body{padding:16px 20px;max-height:280px;overflow:auto;font-family:"Cascadia Code","Fira Code","JetBrains Mono",monospace;font-size:13px;line-height:1.6;white-space:pre;tab-size:4}
+.preview-body .section{color:var(--sec)}
+.preview-body .key{color:var(--key)}
+.preview-body .val{color:var(--val)}
+.preview-body .com{color:var(--cmt);font-style:italic}
+.preview-body .empty{color:var(--text2);font-style:italic}
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 20px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--green);font-size:13px;z-index:1000;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+.cmd-group{margin-bottom:20px}
+.cmd-group h3{font-size:14px;font-weight:600;color:var(--accent);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.cmd-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;gap:12px}
+.cmd-item code{font-family:"Cascadia Code","Fira Code",monospace;font-size:13px;color:var(--val);flex:1}
+.cmd-item .cmd-desc{font-size:12px;color:var(--text2);min-width:100px;max-width:200px}
+.cmd-item .cmd-copy{padding:3px 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text2);cursor:pointer;font-size:11px;white-space:nowrap;transition:all .15s}
+.cmd-item .cmd-copy:hover{border-color:var(--accent);color:var(--accent)}
+.cmd-item .cmd-copy.copied{border-color:var(--green);color:var(--green)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#484f58}
+@media(max-width:768px){.layout{flex-direction:column}.sidebar{width:100%;min-width:auto;display:flex;overflow-x:auto;padding:0;border-right:none;border-bottom:1px solid var(--border)}.sidebar .nav-item{white-space:nowrap;border-left:none;border-bottom:3px solid transparent;padding:10px 14px}.sidebar .nav-item.active{border-left-color:transparent;border-bottom-color:var(--accent)}.half-row{grid-template-columns:1fr}.cmd-item{flex-wrap:wrap}}
+/* Modal & Toggle */
+.overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:999;display:none}
+.overlay.show{display:block}
+.modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;z-index:1000;width:680px;max-width:90vw;max-height:85vh;overflow-y:auto;display:none}
+.modal.show{display:block}
+.modal h2{font-size:16px;font-weight:600;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.modal .cmd-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-family:"Cascadia Code","Fira Code",monospace;font-size:13px;line-height:1.6;white-space:pre;overflow-x:auto;margin-bottom:16px;max-height:300px;overflow-y:auto;color:var(--text)}
+.modal .cmd-box .hl-section{color:var(--sec)}
+.modal .cmd-box .hl-cmd{color:var(--val)}
+.modal .cmd-box .hl-comment{color:var(--cmt);font-style:italic}
+.modal .toggle-row{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
+.modal .toggle-row label{font-size:14px;cursor:pointer;flex:1;color:var(--text)}
+.modal .toggle-row .hint{font-size:12px;color:var(--text2);display:block;margin-top:2px}
+.toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--bg3);border:1px solid var(--border);border-radius:12px;transition:.2s}
+.toggle-slider:before{position:absolute;content:"";height:18px;width:18px;left:2px;bottom:2px;background:var(--text2);border-radius:50%;transition:.2s}
+.toggle-switch input:checked+.toggle-slider{background:var(--accent2);border-color:var(--accent)}
+.toggle-switch input:checked+.toggle-slider:before{transform:translateX(20px);background:#fff}
+.modal .toggle-row .toggle-switch{flex:none}
+.modal-actions{display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.modal-actions button{padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;border:1px solid var(--border);transition:all .15s}
+.btn-deploy-copy{background:var(--accent2);color:#fff;border-color:var(--accent)!important}
+.btn-deploy-copy:hover{background:#388bfd}
+.btn-deploy-close{background:transparent;color:var(--text2)}
+.btn-deploy-close:hover{color:var(--text);background:var(--bg3)}
+.modal .tip{font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5}</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚙️</h1>
+  <span class="sub" id="headerSub"></span>
+  <span class="spacer"></span>
+  <button class="lang-btn" id="langBtn" onclick="toggleLang()"></button>
+</div>
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main">
+    <div class="panels" id="panels"></div>
+    <div class="preview">
+      <div class="preview-header">
+        <span class="title"><span class="fn" id="previewTitleText">myservice.service</span></span>
+        <div class="preview-actions">
+          <button onclick="copyPreview()" class="copy" id="btnCopy">复制</button>
+          <button onclick="downloadPreview()" class="dl" id="btnDownload">下载</button>
+          <button onclick="resetAll()" class="reset" id="btnReset">清空</button>
+          <button onclick="showDeploy()" class="dl" id="btnDeploy">部署</button>
+        </div>
+      </div>
+      <div class="preview-body" id="previewBody"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="overlay" id="deployOverlay" onclick="closeDeploy()"></div>
+<div class="modal" id="deployModal">
+  <h2 id="deployTitle">部署服务</h2>
+  <p class="tip" id="deployTip">将以下命令复制到服务器执行即可完成部署。确保你有 sudo 权限。</p>
+  <div class="cmd-box" id="deployCmdBox"></div>
+  <div class="toggle-row">
+    <label id="deployStartLabel">启动服务 <span class="hint" id="deployStartHint">部署后立即启动</span></label>
+    <label class="toggle-switch"><input type="checkbox" id="deployStartToggle" checked onchange="updateDeployCmd()"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="toggle-row">
+    <label id="deployEnableLabel">开机自启 <span class="hint" id="deployEnableHint">设置 systemctl enable</span></label>
+    <label class="toggle-switch"><input type="checkbox" id="deployEnableToggle" checked onchange="updateDeployCmd()"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="modal-actions">
+    <button class="btn-deploy-copy" id="deployCopyBtn" onclick="copyDeployCmd()">复制命令</button>
+    <button id="deployCloseBtn" class="btn-deploy-close" onclick="closeDeploy()">关闭</button>
+  </div>
+</div><script>
+// I18N
+
+let currentLang=localStorage.getItem('lang');if(!currentLang){currentLang=(navigator.language||'').startsWith('zh')?'zh':'en'}
+const LANG={"zh": {"appTitle": "systemd配置生成器", "appSub": ".service单元文件生成·命令速查", "sideBasic": "基本信息", "sideExec": "执行配置", "sideRestart": "重启策略", "sideResource": "资源控制", "sideSecurity": "安全配置", "sideLogging": "日志与IO", "sideEnv": "环境变量", "sideInstall": "Install", "sideCommands": "常用命令", "previewTitle": "生成预览", "previewEmpty": "#调整表单参数即可实时生成配置...", "btnCopy": "复制", "btnDownload": "下载", "btnReset": "清空", "btnCopyCmd": "复制", "btnCopied": "已复制✓", "btnAddEnv": "+添加环境变量", "envPlaceholderKey": "变量名(如JAVA_HOME)", "envPlaceholderVal": "值(如/usr/lib/jvm/java-11)", "toastCopied": "✅已复制到剪贴板", "toastDownloaded": "⬇️文件已下载", "toastReset": "⚙重置成功", "confirmReset": "确定要清空所有配置吗", "required": "必填", "secBasic": "基本信息", "secExec": "执行配置", "secRestart": "重启策略", "secResource": "资源控制", "secSecurity": "安全配置", "secLogging": "日志与IO", "secEnv": "环境变量", "secInstall": "Install", "secCommands": "常用命令", "cmdGrpManage": "服务管理", "cmdGrpUnit": "单元管理", "cmdGrpLog": "日志查看", "cmdGrpAnalyze": "系统分析", "cmdGrpUtil": "实用工具", "cmdStart": "启动服务", "cmdStop": "停止服务", "cmdRestart": "重启服务", "cmdReload": "重载配置", "cmdEnable": "设置开机自启", "cmdDisable": "取消开机自启", "cmdStatus": "查看服务状态", "cmdIsActive": "检查是否运行", "cmdIsEnabled": "检查是否自启", "cmdListRunning": "列出运行中的服务", "cmdListFiles": "列出所有服务单元文件", "cmdDeps": "查看依赖树", "cmdShow": "查看完整配置", "cmdCat": "查看单元文件内容", "cmdEdit": "编辑覆盖配置", "cmdEditFull": "编辑完整单元文件", "cmdMask": "屏蔽单元禁止启动", "cmdUnmask": "取消屏蔽", "cmdDaemonReload": "重载所有单元文件", "cmdLogView": "查看指定服务的日志", "cmdLogFollow": "实时跟踪日志", "cmdLogSince": "查看最近1小时日志", "cmdLogErr": "查看本次启动的错误日志", "cmdLogDisk": "查看日志占用的磁盘空间", "cmdLogVacuum": "清理日志到指定大小", "cmdLogVerify": "验证日志文件完整性", "cmdBootTime": "查看启动耗时", "cmdBlame": "按耗时排序各单元", "cmdCritical": "查看关键启动链", "cmdPlot": "生成启动图", "cmdVerify": "验证单元文件语法", "cmdSecurity": "安全审计", "cmdCalendar": "测试定时表达式", "cmdTimers": "列出所有定时器", "cmdSockets": "列出所有监听套接字", "cmdNtp": "启用NTP时间同步", "cmdHostname": "设置主机名", "cmdLocale": "设置系统语言", "cmdSessions": "列出用户会话", "cmdEscape": "转义路径为systemd格式", "hintDescription": "服务的简短描述", "hintDocumentation": "文档URI，多个用空格分隔", "hintAfter": "在此单元之后启动", "hintRequires": "强依赖，失败则停止本单元", "hintWants": "弱依赖，不影响本单元启动", "hintBindsTo": "绑定依赖，终止则本单元终止", "hintPartOf": "所属单元组", "hintConditionPathExists": "前置条件：路径存在才启动", "hintExecStart": "启动命令（必填）", "hintExecStop": "停止命令", "hintExecReload": "重载命令", "hintWorkingDirectory": "工作目录", "hintRootDirectory": "通过chroot切换根目录", "hintType": "服务类型", "hintRemainAfterExit": "进程退出后服务仍标记为active", "hintRestart": "重启条件", "hintRestartSec": "重启间隔（秒）", "hintStartLimitIntervalSec": "启动限制统计周期（秒）", "hintStartLimitBurst": "周期内最大启动次数", "hintStartLimitAction": "超出限制时的操作", "hintCPUQuota": "CPU配额，如50%", "hintMemoryMax": "内存上限，如500M/2G", "hintMemoryHigh": "内存软限制（开始回收）", "hintMemorySwapMax": "Swap上限", "hintTasksMax": "最大任务/线程数，默认infinity", "hintIOWeight": "IO权重1-10000", "hintCPUShares": "CPU份额2-262144", "hintAllowedCPUs": "允许的CPU列表，如0-3", "hintAllowedMemoryNodes": "允许的内存NUMA节点", "hintUser": "运行用户", "hintGroup": "运行组", "hintProtectSystem": "保护系统目录", "hintProtectHome": "保护用户家目录", "hintPrivateTmp": "使用私有/tmp空间", "hintPrivateDevices": "限制设备访问", "hintPrivateNetwork": "禁用网络访问", "hintNoNewPrivileges": "禁止获取新权限", "hintCapabilityBoundingSet": "能力集限制，如CAP_NET_BIND_SERVICE", "hintReadOnlyPaths": "只读路径，多个用空格分隔", "hintReadWritePaths": "读写路径", "hintInaccessiblePaths": "不可见路径", "hintProtectKernelModules": "禁止加载内核模块", "hintProtectControlGroups": "禁止修改cgroups", "hintProtectKernelTunables": "保护内核参数", "hintProtectClock": "禁止修改系统时钟", "hintSystemCallFilter": "系统调用过滤，如@system-service", "hintSystemCallArchitectures": "系统调用架构，如native", "hintStandardOutput": "标准输出", "hintStandardError": "标准错误", "hintSyslogIdentifier": "syslog标识符", "hintSyslogFacility": "syslog设施", "hintLogLevelMax": "最大日志级别", "hintEnvironment": "环境变量", "hintEnvironmentFile": "环境变量文件路径，如/etc/myapp/env", "hintWantedBy": "默认multi-user.target", "hintAlso": "安装时一并启用的单元", "hintAlias": "别名", "optRestartNo": "no—从不重启", "optRestartOnSuccess": "on-success—成功退出时", "optRestartOnFailure": "on-failure—失败时（默认）", "optRestartOnAbnormal": "on-abnormal—异常终止时", "optRestartOnWatchdog": "on-watchdog—watchdog超时", "optRestartOnAbort": "on-abort—收到致命信号", "optRestartAlways": "always—总是重启", "optPsNotSet": "不设置", "optPsTrue": "true—只读/usr/boot", "optPsFull": "full—只读/etc和已列出的", "optPsStrict": "strict—只读整个文件系统", "optPhNotSet": "不设置", "optPhTrue": "true—只读/root/home", "optPhReadOnly": "read-only", "optPhTmpfs": "tmpfs—挂载为空tmpfs", "optSoDefault": "默认", "optSoFileExample": "file:…", "optLvlDefault": "默认", "btnDeploy": "部署", "deployTitle": "部署服务", "deployTip": "将以下命令复制到Linux服务器执行即可完成部署。确保你有sudo或root权限。", "deployStartLabel": "启动服务", "deployStartHint": "部署后立即启动", "deployEnableLabel": "开机自启", "deployEnableHint": "设置systemctlenable", "btnDeployCopy": "复制命令", "btnDeployCopied": "已复制✓", "deployClose": "关闭", "deployComment": "部署"}, "en": {"appTitle": "systemd Config Generator", "appSub": ".service Unit Generator · Command Reference", "sideBasic": "Basic Info", "sideExec": "Execution", "sideRestart": "Restart Policy", "sideResource": "Resource Control", "sideSecurity": "Security", "sideLogging": "Logging & IO", "sideEnv": "Environment", "sideInstall": "Install", "sideCommands": "Commands", "previewTitle": "Generated Preview", "previewEmpty": "# Adjust form values to generate config in real time...", "btnCopy": "Copy", "btnDownload": "Download", "btnReset": "Reset", "btnCopyCmd": "Copy", "btnCopied": "Copied ✓", "btnAddEnv": "+ Add Variable", "envPlaceholderKey": "Key (e.g. JAVA_HOME)", "envPlaceholderVal": "Value (e.g. /usr/lib/jvm/java-11)", "toastCopied": "✅ Copied to clipboard", "toastDownloaded": "⬇️ File downloaded", "toastReset": "⚙ Reset OK", "confirmReset": "Reset all configuration?", "required": "required", "secBasic": "Basic Info", "secExec": "Execution", "secRestart": "Restart Policy", "secResource": "Resource Control", "secSecurity": "Security", "secLogging": "Logging & IO", "secEnv": "Environment", "secInstall": "Install", "secCommands": "Commands", "cmdGrpManage": "Service Management", "cmdGrpUnit": "Unit Management", "cmdGrpLog": "Journal Logs", "cmdGrpAnalyze": "System Analysis", "cmdGrpUtil": "Utilities", "cmdStart": "Start service", "cmdStop": "Stop service", "cmdRestart": "Restart service", "cmdReload": "Reload configuration", "cmdEnable": "Enable on boot", "cmdDisable": "Disable on boot", "cmdStatus": "Check service status", "cmdIsActive": "Check if running", "cmdIsEnabled": "Check if enabled", "cmdListRunning": "List running services", "cmdListFiles": "List all unit files", "cmdDeps": "Show dependency tree", "cmdShow": "Show full configuration", "cmdCat": "Show unit file content", "cmdEdit": "Edit override config", "cmdEditFull": "Edit full unit file", "cmdMask": "Mask unit (prevent start)", "cmdUnmask": "Unmask unit", "cmdDaemonReload": "Reload all unit files", "cmdLogView": "View service logs", "cmdLogFollow": "Follow logs in real-time", "cmdLogSince": "View last hour logs", "cmdLogErr": "View errors from this boot", "cmdLogDisk": "Check journal disk usage", "cmdLogVacuum": "Clean journal to size limit", "cmdLogVerify": "Verify journal integrity", "cmdBootTime": "Show boot time", "cmdBlame": "Sort units by init time", "cmdCritical": "Show critical boot chain", "cmdPlot": "Generate boot chart", "cmdVerify": "Verify unit file syntax", "cmdSecurity": "Security audit", "cmdCalendar": "Test calendar expression", "cmdTimers": "List all timers", "cmdSockets": "List all sockets", "cmdNtp": "Enable NTP time sync", "cmdHostname": "Set hostname", "cmdLocale": "Set system locale", "cmdSessions": "List user sessions", "cmdEscape": "Escape path for systemd", "hintDescription": "Short description of the service", "hintDocumentation": "Doc URIs, space-separated", "hintAfter": "Start after this unit", "hintRequires": "Hard dependency, failure stops this unit", "hintWants": "Weak dependency, does not affect startup", "hintBindsTo": "Bound dependency, stops with bound unit", "hintPartOf": "Part of a group of units", "hintConditionPathExists": "Only start if path exists", "hintExecStart": "Start command (required)", "hintExecStop": "Stop command", "hintExecReload": "Reload command", "hintWorkingDirectory": "Working directory", "hintRootDirectory": "chroot to this directory", "hintType": "Service type", "hintRemainAfterExit": "Service stays active after process exits", "hintRestart": "Restart condition", "hintRestartSec": "Restart interval (seconds)", "hintStartLimitIntervalSec": "Start limit interval (seconds)", "hintStartLimitBurst": "Max starts per interval", "hintStartLimitAction": "Action when limit exceeded", "hintCPUQuota": "CPU quota, e.g. 50%", "hintMemoryMax": "Memory limit, e.g. 500M/2G", "hintMemoryHigh": "Memory soft limit (starts reclaim)", "hintMemorySwapMax": "Swap limit", "hintTasksMax": "Max tasks/threads, default infinity", "hintIOWeight": "IO weight 1-10000", "hintCPUShares": "CPU shares 2-262144", "hintAllowedCPUs": "Allowed CPUs, e.g. 0-3", "hintAllowedMemoryNodes": "Allowed NUMA memory nodes", "hintUser": "Run as user", "hintGroup": "Run as group", "hintProtectSystem": "Protect system directories", "hintProtectHome": "Protect home directories", "hintPrivateTmp": "Use private /tmp", "hintPrivateDevices": "Restrict device access", "hintPrivateNetwork": "Disable network access", "hintNoNewPrivileges": "Prevent gaining new privileges", "hintCapabilityBoundingSet": "e.g. CAP_NET_BIND_SERVICE", "hintReadOnlyPaths": "Read-only paths, space-separated", "hintReadWritePaths": "Read-write paths", "hintInaccessiblePaths": "Inaccessible paths", "hintProtectKernelModules": "Block kernel module loading", "hintProtectControlGroups": "Block cgroups modification", "hintProtectKernelTunables": "Protect kernel tunables", "hintProtectClock": "Block system clock changes", "hintSystemCallFilter": "e.g. @system-service", "hintSystemCallArchitectures": "e.g. native", "hintStandardOutput": "Standard output", "hintStandardError": "Standard error", "hintSyslogIdentifier": "Syslog tag", "hintSyslogFacility": "Syslog facility", "hintLogLevelMax": "Max log level", "hintEnvironment": "Environment variables", "hintEnvironmentFile": "Path to env file, e.g. /etc/myapp/env", "hintWantedBy": "Default multi-user.target", "hintAlso": "Units to also enable", "hintAlias": "Alias name", "optRestartNo": "no — never restart", "optRestartOnSuccess": "on-success — on successful exit", "optRestartOnFailure": "on-failure — on failure (default)", "optRestartOnAbnormal": "on-abnormal — on abnormal termination", "optRestartOnWatchdog": "on-watchdog — watchdog timeout", "optRestartOnAbort": "on-abort — fatal signal", "optRestartAlways": "always — always restart", "optPsNotSet": "not set", "optPsTrue": "true — read-only /usr /boot", "optPsFull": "full — read-only /etc and above", "optPsStrict": "strict — read-only entire filesystem", "optPhNotSet": "not set", "optPhTrue": "true — read-only /root /home", "optPhReadOnly": "read-only", "optPhTmpfs": "tmpfs — mount as empty tmpfs", "optSoDefault": "default", "optSoFileExample": "file:…", "optLvlDefault": "default", "btnDeploy": "Deploy", "deployTitle": "Deploy Service", "deployTip": "Copy the command below and run it on your Linux server. Requires sudo or root privileges.", "deployStartLabel": "Start Service", "deployStartHint": "Start immediately after deploy", "deployEnableLabel": "Enable on Boot", "deployEnableHint": "Run systemctl enable", "btnDeployCopy": "Copy Command", "btnDeployCopied": "Copied ✓", "deployClose": "Close", "deployComment": "Deploy"}};
+function t(k){const d=LANG[currentLang]||LANG.en;return d&&d[k]!==undefined?d[k]:k}
+function applyLang(){document.title=t("appTitle");document.querySelector("html").lang=currentLang==="zh"?"zh-CN":"en";document.getElementById("langBtn").textContent=currentLang==="zh"?"🌐 English":"🌐 中文";document.getElementById("headerSub").textContent=t("appSub");document.getElementById("previewTitleText").textContent=t("previewTitle")+" — myservice.service";document.getElementById("btnCopy").textContent=t("btnCopy");document.getElementById("btnDownload").textContent=t("btnDownload");document.getElementById("btnReset").textContent=t("btnReset");document.getElementById("btnDeploy").textContent=t("btnDeploy");document.getElementById("deployTitle").textContent=t("deployTitle");document.getElementById("deployTip").textContent=t("deployTip");document.getElementById("deployCloseBtn").textContent=t("deployClose");document.getElementById("deployStartLabel").innerHTML=t("deployStartLabel")+" <span class=\"hint\">"+t("deployStartHint")+"</span>";document.getElementById("deployEnableLabel").innerHTML=t("deployEnableLabel")+" <span class=\"hint\">"+t("deployEnableHint")+"</span>";document.getElementById("deployCopyBtn").textContent=t("btnDeployCopy")}function toggleLang(){currentLang=currentLang==='zh'?'en':'zh';localStorage.setItem('lang',currentLang);applyLang();renderSidebar();renderPanels()}
+
+// Form data
+const formData={
+Description:"My Service",Documentation:"",After:"network.target",Requires:"",Wants:"",
+BindsTo:"",PartOf:"",ConditionPathExists:"",
+ExecStart:"/usr/local/bin/my-service",ExecStop:"",ExecReload:"",
+WorkingDirectory:"",RootDirectory:"",Type:"simple",RemainAfterExit:false,
+Restart:"on-failure",RestartSec:"5",
+StartLimitIntervalSec:"",StartLimitBurst:"",StartLimitAction:"none",
+CPUQuota:"",MemoryMax:"",MemoryHigh:"",MemorySwapMax:"",
+TasksMax:"infinity",IOWeight:"",CPUShares:"",
+AllowedCPUs:"",AllowedMemoryNodes:"",
+User:"",Group:"",ProtectSystem:"",ProtectHome:"",
+PrivateTmp:false,PrivateDevices:false,PrivateNetwork:false,
+NoNewPrivileges:false,CapabilityBoundingSet:"",
+ReadOnlyPaths:"",ReadWritePaths:"",InaccessiblePaths:"",
+ProtectKernelModules:false,ProtectControlGroups:false,
+ProtectKernelTunables:false,ProtectClock:false,
+SystemCallFilter:"",SystemCallArchitectures:"",
+EnvironmentPairs:[{key:"",value:""}],
+EnvironmentFile:"",
+WantedBy:"multi-user.target",Also:"",Alias:"",
+StandardOutput:"",StandardError:"",
+SyslogIdentifier:"",SyslogFacility:"",LogLevelMax:"",
+};
+function fd(k){return formData[k]}
+function sd(k,v){formData[k]=v;renderPreview()}
+// Sections
+const sections=[
+  {id:"basic",icon:"\u2699\ufe0f",label:"sideBasic",fields:[
+    {key:"Description",label:"Description",hint:"hintDescription",type:"text"},
+    {key:"Documentation",label:"Documentation",hint:"hintDocumentation",type:"text"},
+    {key:"After",label:"After",hint:"hintAfter",type:"text"},
+    {key:"Requires",label:"Requires",hint:"hintRequires",type:"text"},
+    {key:"Wants",label:"Wants",hint:"hintWants",type:"text"},
+    {key:"BindsTo",label:"BindsTo",hint:"hintBindsTo",type:"text"},
+    {key:"PartOf",label:"PartOf",hint:"hintPartOf",type:"text"},
+    {key:"ConditionPathExists",label:"ConditionPathExists",hint:"hintConditionPathExists",type:"text"},
+  ]},
+  {id:"exec",icon:"\u25b6\ufe0f",label:"sideExec",fields:[
+    {key:"ExecStart",label:"ExecStart",hint:"hintExecStart",type:"text",required:true},
+    {key:"ExecStop",label:"ExecStop",hint:"hintExecStop",type:"text"},
+    {key:"ExecReload",label:"ExecReload",hint:"hintExecReload",type:"text"},
+    {key:"WorkingDirectory",label:"WorkingDirectory",hint:"hintWorkingDirectory",type:"text"},
+    {key:"RootDirectory",label:"RootDirectory",hint:"hintRootDirectory",type:"text"},
+    {key:"Type",label:"Type",hint:"hintType",type:"select",options:["simple","exec","forking","oneshot","dbus","notify","idle"]},
+    {key:"RemainAfterExit",label:"RemainAfterExit",hint:"hintRemainAfterExit",type:"checkbox"},
+  ]},
+  {id:"restart",icon:"\ud83d\udd04",label:"sideRestart",fields:[
+    {key:"Restart",label:"Restart",hint:"hintRestart",type:"select",options:[
+      {v:"no",l:"optRestartNo"},{v:"on-success",l:"optRestartOnSuccess"},{v:"on-failure",l:"optRestartOnFailure"},
+      {v:"on-abnormal",l:"optRestartOnAbnormal"},{v:"on-watchdog",l:"optRestartOnWatchdog"},
+      {v:"on-abort",l:"optRestartOnAbort"},{v:"always",l:"optRestartAlways"},
+    ]},
+    {key:"RestartSec",label:"RestartSec",hint:"hintRestartSec",type:"text"},
+    {key:"StartLimitIntervalSec",label:"StartLimitIntervalSec",hint:"hintStartLimitIntervalSec",type:"text"},
+    {key:"StartLimitBurst",label:"StartLimitBurst",hint:"hintStartLimitBurst",type:"text"},
+    {key:"StartLimitAction",label:"StartLimitAction",hint:"hintStartLimitAction",type:"select",options:[
+      {v:"none",l:"none"},{v:"reboot",l:"reboot"},{v:"reboot-force",l:"reboot-force"},{v:"reboot-immediate",l:"reboot-immediate"},
+    ]},
+  ]},
+  {id:"resource",icon:"\ud83d\udcbb",label:"sideResource",fields:[
+    {key:"CPUQuota",label:"CPUQuota",hint:"hintCPUQuota",type:"text"},
+    {key:"MemoryMax",label:"MemoryMax",hint:"hintMemoryMax",type:"text"},
+    {key:"MemoryHigh",label:"MemoryHigh",hint:"hintMemoryHigh",type:"text"},
+    {key:"MemorySwapMax",label:"MemorySwapMax",hint:"hintMemorySwapMax",type:"text"},
+    {key:"TasksMax",label:"TasksMax",hint:"hintTasksMax",type:"text"},
+    {key:"IOWeight",label:"IOWeight",hint:"hintIOWeight",type:"text"},
+    {key:"CPUShares",label:"CPUShares",hint:"hintCPUShares",type:"text"},
+    {key:"AllowedCPUs",label:"AllowedCPUs",hint:"hintAllowedCPUs",type:"text"},
+    {key:"AllowedMemoryNodes",label:"AllowedMemoryNodes",hint:"hintAllowedMemoryNodes",type:"text"},
+  ]},
+  {id:"security",icon:"\ud83d\udd12",label:"sideSecurity",fields:[
+    {key:"User",label:"User",hint:"hintUser",type:"text"},
+    {key:"Group",label:"Group",hint:"hintGroup",type:"text"},
+    {key:"ProtectSystem",label:"ProtectSystem",hint:"hintProtectSystem",type:"select",options:[
+      {v:"",l:"optPsNotSet"},{v:"true",l:"optPsTrue"},{v:"full",l:"optPsFull"},{v:"strict",l:"optPsStrict"},
+    ]},
+    {key:"ProtectHome",label:"ProtectHome",hint:"hintProtectHome",type:"select",options:[
+      {v:"",l:"optPhNotSet"},{v:"true",l:"optPhTrue"},{v:"read-only",l:"optPhReadOnly"},{v:"tmpfs",l:"optPhTmpfs"},
+    ]},
+    {key:"PrivateTmp",label:"PrivateTmp",hint:"hintPrivateTmp",type:"checkbox"},
+    {key:"PrivateDevices",label:"PrivateDevices",hint:"hintPrivateDevices",type:"checkbox"},
+    {key:"PrivateNetwork",label:"PrivateNetwork",hint:"hintPrivateNetwork",type:"checkbox"},
+    {key:"NoNewPrivileges",label:"NoNewPrivileges",hint:"hintNoNewPrivileges",type:"checkbox"},
+    {key:"CapabilityBoundingSet",label:"CapabilityBoundingSet",hint:"hintCapabilityBoundingSet",type:"text"},
+    {key:"ReadOnlyPaths",label:"ReadOnlyPaths",hint:"hintReadOnlyPaths",type:"text"},
+    {key:"ReadWritePaths",label:"ReadWritePaths",hint:"hintReadWritePaths",type:"text"},
+    {key:"InaccessiblePaths",label:"InaccessiblePaths",hint:"hintInaccessiblePaths",type:"text"},
+    {key:"ProtectKernelModules",label:"ProtectKernelModules",hint:"hintProtectKernelModules",type:"checkbox"},
+    {key:"ProtectControlGroups",label:"ProtectControlGroups",hint:"hintProtectControlGroups",type:"checkbox"},
+    {key:"ProtectKernelTunables",label:"ProtectKernelTunables",hint:"hintProtectKernelTunables",type:"checkbox"},
+    {key:"ProtectClock",label:"ProtectClock",hint:"hintProtectClock",type:"checkbox"},
+    {key:"SystemCallFilter",label:"SystemCallFilter",hint:"hintSystemCallFilter",type:"text"},
+    {key:"SystemCallArchitectures",label:"SystemCallArchitectures",hint:"hintSystemCallArchitectures",type:"text"},
+  ]},
+  {id:"logging",icon:"\ud83d\udcdd",label:"sideLogging",fields:[
+    {key:"StandardOutput",label:"StandardOutput",hint:"hintStandardOutput",type:"select",options:[
+      {v:"",l:"optSoDefault"},{v:"null",l:"null"},{v:"inherit",l:"inherit"},{v:"journal",l:"journal"},
+      {v:"kmsg",l:"kmsg"},{v:"journal+console",l:"journal+console"},{v:"syslog",l:"syslog"},
+      {v:"syslog+console",l:"syslog+console"},{v:"file:/var/log/myapp.log",l:"optSoFileExample"},
+    ]},
+    {key:"StandardError",label:"StandardError",hint:"hintStandardError",type:"select",options:[
+      {v:"",l:"optSoDefault"},{v:"null",l:"null"},{v:"inherit",l:"inherit"},{v:"journal",l:"journal"},
+      {v:"kmsg",l:"kmsg"},{v:"journal+console",l:"journal+console"},{v:"syslog",l:"syslog"},
+    ]},
+    {key:"SyslogIdentifier",label:"SyslogIdentifier",hint:"hintSyslogIdentifier",type:"text"},
+    {key:"SyslogFacility",label:"SyslogFacility",hint:"hintSyslogFacility",type:"select",options:[
+      {v:"",l:"optLvlDefault"},{v:"daemon",l:"daemon"},{v:"user",l:"user"},{v:"auth",l:"auth"},
+      {v:"local0",l:"local0"},{v:"local1",l:"local1"},{v:"local2",l:"local2"},{v:"local3",l:"local3"},
+      {v:"local4",l:"local4"},{v:"local5",l:"local5"},{v:"local6",l:"local6"},{v:"local7",l:"local7"},
+    ]},
+    {key:"LogLevelMax",label:"LogLevelMax",hint:"hintLogLevelMax",type:"select",options:[
+      {v:"",l:"optLvlDefault"},{v:"emerg",l:"emerg"},{v:"alert",l:"alert"},{v:"crit",l:"crit"},
+      {v:"err",l:"err"},{v:"warning",l:"warning"},{v:"notice",l:"notice"},{v:"info",l:"info"},{v:"debug",l:"debug"},
+    ]},
+  ]},
+  {id:"env",icon:"\ud83c\udf10",label:"sideEnv",fields:[
+    {key:"_env_list",label:"Environment",hint:"hintEnvironment",type:"custom"},
+    {key:"EnvironmentFile",label:"EnvironmentFile",hint:"hintEnvironmentFile",type:"text"},
+  ]},
+  {id:"install",icon:"\ud83d\udccc",label:"sideInstall",fields:[
+    {key:"WantedBy",label:"WantedBy",hint:"hintWantedBy",type:"text"},
+    {key:"Also",label:"Also",hint:"hintAlso",type:"text"},
+    {key:"Alias",label:"Alias",hint:"hintAlias",type:"text"},
+  ]},
+  {id:"commands",icon:"\ud83d\udca1",label:"sideCommands",fields:[],isCommands:true},
+];
+// Command groups
+const cmdGroups=[
+  {key:"Manage",title:"cmdGrpManage",cmds:[
+    {cmd:"systemctl start <service>",descKey:"cmdStart"},
+    {cmd:"systemctl stop <service>",descKey:"cmdStop"},
+    {cmd:"systemctl restart <service>",descKey:"cmdRestart"},
+    {cmd:"systemctl reload <service>",descKey:"cmdReload"},
+    {cmd:"systemctl enable <service>",descKey:"cmdEnable"},
+    {cmd:"systemctl disable <service>",descKey:"cmdDisable"},
+    {cmd:"systemctl status <service>",descKey:"cmdStatus"},
+    {cmd:"systemctl is-active <service>",descKey:"cmdIsActive"},
+    {cmd:"systemctl is-enabled <service>",descKey:"cmdIsEnabled"},
+  ]},
+  {key:"Unit",title:"cmdGrpUnit",cmds:[
+    {cmd:"systemctl list-units --type=service --state=running",descKey:"cmdListRunning"},
+    {cmd:"systemctl list-unit-files --type=service",descKey:"cmdListFiles"},
+    {cmd:"systemctl list-dependencies <service>",descKey:"cmdDeps"},
+    {cmd:"systemctl show <service>",descKey:"cmdShow"},
+    {cmd:"systemctl cat <service>",descKey:"cmdCat"},
+    {cmd:"systemctl edit <service>",descKey:"cmdEdit"},
+    {cmd:"systemctl edit --full <service>",descKey:"cmdEditFull"},
+    {cmd:"systemctl mask <service>",descKey:"cmdMask"},
+    {cmd:"systemctl unmask <service>",descKey:"cmdUnmask"},
+    {cmd:"systemctl daemon-reload",descKey:"cmdDaemonReload"},
+  ]},
+  {key:"Log",title:"cmdGrpLog",cmds:[
+    {cmd:"journalctl -u <service>",descKey:"cmdLogView"},
+    {cmd:"journalctl -u <service> -f",descKey:"cmdLogFollow"},
+    {cmd:"journalctl -u <service> --since \"1 hour ago\"",descKey:"cmdLogSince"},
+    {cmd:"journalctl -u <service> -p err -b",descKey:"cmdLogErr"},
+    {cmd:"journalctl --disk-usage",descKey:"cmdLogDisk"},
+    {cmd:"journalctl --vacuum-size=500M",descKey:"cmdLogVacuum"},
+    {cmd:"journalctl --verify",descKey:"cmdLogVerify"},
+  ]},
+  {key:"Analyze",title:"cmdGrpAnalyze",cmds:[
+    {cmd:"systemd-analyze",descKey:"cmdBootTime"},
+    {cmd:"systemd-analyze blame",descKey:"cmdBlame"},
+    {cmd:"systemd-analyze critical-chain",descKey:"cmdCritical"},
+    {cmd:"systemd-analyze plot > boot.svg",descKey:"cmdPlot"},
+    {cmd:"systemd-analyze verify <file>",descKey:"cmdVerify"},
+    {cmd:"systemd-analyze security <service>",descKey:"cmdSecurity"},
+    {cmd:"systemd-analyze calendar \"Mon *-*-* 03:00:00\"",descKey:"cmdCalendar"},
+  ]},
+  {key:"Util",title:"cmdGrpUtil",cmds:[
+    {cmd:"systemctl list-timers --all",descKey:"cmdTimers"},
+    {cmd:"systemctl list-sockets",descKey:"cmdSockets"},
+    {cmd:"timedatectl set-ntp true",descKey:"cmdNtp"},
+    {cmd:"hostnamectl set-hostname <name>",descKey:"cmdHostname"},
+    {cmd:"localectl set-locale LANG=zh_CN.UTF-8",descKey:"cmdLocale"},
+    {cmd:"loginctl list-sessions",descKey:"cmdSessions"},
+    {cmd:"systemd-escape \"some/path\"",descKey:"cmdEscape"},
+  ]},
+];
+// Render functions
+function esc(s){if(s==null)return "";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function renderSidebar(){const e=document.getElementById("sidebar");e.innerHTML=sections.map((s,i)=>"<div class=\"nav-item"+(i===0?" active":"")+"\" data-section=\""+s.id+"\" onclick=\"switchSection('"+s.id+"')\">"+s.icon+" "+t(s.label)+"</div>").join("")}
+function renderField(f){const v=formData[f.key];const rs=f.required?" ("+t("required")+")":"";switch(f.type){case"checkbox":return '<div class="check-row"><input type="checkbox" data-key="'+f.key+'" id="f-'+f.key+'"'+(v?" checked":"")+'><label for="f-'+f.key+'">'+f.label+' <span class="hint">'+t(f.hint)+'</span></label></div>';case"select":let opts="";if(Array.isArray(f.options)){opts=f.options.map(o=>{const ov=typeof o==="string"?o:o.v;const ol=typeof o==="string"?o:t(o.l);return '<option value="'+ov+'"'+(v===ov?" selected":"")+">"+ol+"</option>"}).join("")}return '<div class="form-row"><label for="f-'+f.key+'">'+f.label+rs+' <span class="hint">'+t(f.hint)+'</span></label><select data-key="'+f.key+'" id="f-'+f.key+'">'+opts+'</select></div>';case"custom":if(f.key==="_env_list"){return '<div class="form-row"><label>'+f.label+' <span class="hint">'+t(f.hint)+'</span></label><div class="env-list">'+formData.EnvironmentPairs.map((p,i)=>envRowHTML(i)).join("")+'<button class="btn-add" type="button">'+t("btnAddEnv")+'</button></div></div>'}return"";default:return '<div class="form-row"><label for="f-'+f.key+'">'+f.label+rs+' <span class="hint">'+t(f.hint)+'</span></label><input type="text" data-key="'+f.key+'" id="f-'+f.key+'" value="'+esc(v)+'" placeholder="'+t(f.hint)+'"></div>'}}
+function envRowHTML(i){const p=formData.EnvironmentPairs[i]||{key:"",value:""};return '<div class="env-item" data-idx="'+i+'"><input type="text" class="env-key" value="'+esc(p.key)+'" placeholder="'+t("envPlaceholderKey")+'"><input type="text" class="env-val" value="'+esc(p.value)+'" placeholder="'+t("envPlaceholderVal")+'"><button class="btn-del" onclick="delEnvRow(this)">\u2715</button></div>'}
+function initEnvFields(){document.querySelectorAll(".env-list").forEach(function(l){l.addEventListener("input",function(e){var item=e.target.closest(".env-item");if(!item)return;var idx=parseInt(item.dataset.idx);var key=item.querySelector(".env-key").value;var val=item.querySelector(".env-val").value;if(!formData.EnvironmentPairs[idx])formData.EnvironmentPairs[idx]={key:"",value:""};formData.EnvironmentPairs[idx].key=key;formData.EnvironmentPairs[idx].value=val;renderPreview()})})}
+function addEnvRow(listEl){formData.EnvironmentPairs.push({key:"",value:""});listEl.innerHTML=formData.EnvironmentPairs.map(function(p,i){return envRowHTML(i)}).join("")+'<button class="btn-add" type="button">'+t("btnAddEnv")+"</button>";listEl.querySelector(".btn-add").addEventListener("click",function(){addEnvRow(listEl)});initEnvFields();renderPreview()}
+function delEnvRow(btn){var item=btn.closest(".env-item");var idx=parseInt(item.dataset.idx);formData.EnvironmentPairs.splice(idx,1);var list=item.closest(".env-list");list.innerHTML=formData.EnvironmentPairs.map(function(p,i){return envRowHTML(i)}).join("")+'<button class="btn-add" type="button">'+t("btnAddEnv")+"</button>";list.querySelector(".btn-add").addEventListener("click",function(){addEnvRow(list)});initEnvFields();renderPreview()}
+function renderPanels(){const el=document.getElementById("panels");el.innerHTML=sections.map(function(s){if(s.isCommands)return renderCommandsPanel(s);return '<div class="panel'+(s.id==="basic"?" active":"")+'" id="panel-'+s.id+'"><h2>'+s.icon+" "+t(s.label)+"</h2>"+s.fields.map(function(f){return renderField(f)}).join("")+"</div>"}).join("");document.querySelectorAll(".env-list").forEach(function(el){var btn=el.querySelector(".btn-add");if(btn)btn.addEventListener("click",function(){addEnvRow(el)})});document.querySelectorAll("[data-key]").forEach(function(el){var key=el.dataset.key;if(el.tagName==="INPUT"&&el.type==="checkbox"){el.addEventListener("change",function(){sd(key,el.checked)})}else if(el.tagName==="INPUT"||el.tagName==="SELECT"){el.addEventListener("input",function(){sd(key,el.value)});el.addEventListener("change",function(){sd(key,el.value)})}});initEnvFields();renderPreview()}
+function renderCommandsPanel(s){return '<div class="panel" id="panel-'+s.id+'"><h2>\ud83d\udca1 '+t("secCommands")+"</h2>"+cmdGroups.map(function(g){return '<div class="cmd-group"><h3>'+t(g.title)+"</h3>"+g.cmds.map(function(c){return '<div class="cmd-item"><code>'+esc(c.cmd)+'</code><span class="cmd-desc">'+t(c.descKey)+'</span><button class="cmd-copy" onclick="copyCmd(this,\''+esc(c.cmd)+"\')"+'">'+t("btnCopyCmd")+"</button></div>"}).join("")+"</div>"}).join("")+"</div>"}
+function switchSection(id){document.querySelectorAll(".sidebar .nav-item").forEach(function(el){el.classList.remove("active")});document.querySelectorAll(".panel").forEach(function(el){el.classList.remove("active")});var nav=document.querySelector(".sidebar [data-section=\""+id+"\"]");if(nav)nav.classList.add("active");var p=document.getElementById("panel-"+id);if(p)p.classList.add("active")}
+function generateConfig(){var L=[];L.push("[Unit]");L.push("Description="+(fd("Description")||"My Service"));["Documentation","After","Requires","Wants","BindsTo","PartOf","ConditionPathExists"].forEach(function(k){var v=fd(k);if(v)L.push(k+"="+v)});L.push("");L.push("[Service]");L.push("Type="+(fd("Type")||"simple"));if(fd("ExecStart")){L.push("ExecStart="+fd("ExecStart"))}else{L.push("# ExecStart= (not set)")}["ExecStop","ExecReload","WorkingDirectory","RootDirectory"].forEach(function(k){var v=fd(k);if(v)L.push(k+"="+v)});if(fd("RemainAfterExit"))L.push("RemainAfterExit=yes");if(fd("Restart")&&fd("Restart")!=="no"){L.push("Restart="+fd("Restart"));var rs=fd("RestartSec");if(rs)L.push("RestartSec="+rs)}["StartLimitIntervalSec","StartLimitBurst"].forEach(function(k){var v=fd(k);if(v)L.push(k+"="+v)});if(fd("StartLimitAction")&&fd("StartLimitAction")!=="none")L.push("StartLimitAction="+fd("StartLimitAction"));["CPUQuota","MemoryMax","MemoryHigh","MemorySwapMax","IOWeight","CPUShares","AllowedCPUs","AllowedMemoryNodes"].forEach(function(k){var v=fd(k);if(v)L.push(k+"="+v)});if(fd("TasksMax"))L.push("TasksMax="+fd("TasksMax"));["User","Group","CapabilityBoundingSet","ReadOnlyPaths","ReadWritePaths","InaccessiblePaths","SystemCallFilter","SystemCallArchitectures"].forEach(function(k){var v=fd(k);if(v)L.push(k+"="+v)});if(fd("ProtectSystem"))L.push("ProtectSystem="+fd("ProtectSystem"));if(fd("ProtectHome"))L.push("ProtectHome="+fd("ProtectHome"));["PrivateTmp","PrivateDevices","PrivateNetwork","NoNewPrivileges","ProtectKernelModules","ProtectControlGroups","ProtectKernelTunables","ProtectClock"].forEach(function(k){if(fd(k))L.push(k+"=true")});["StandardOutput","StandardError","SyslogIdentifier","SyslogFacility","LogLevelMax"].forEach(function(k){var v=fd(k);if(v)L.push(k+"="+v)});var envPairs=formData.EnvironmentPairs.filter(function(p){return p.key.trim()});if(envPairs.length>0){L.push("Environment="+envPairs.map(function(p){return p.key.trim()+"=\""+p.value.trim()+"\""}).join(" "))}var ef=fd("EnvironmentFile");if(ef)L.push("EnvironmentFile="+ef);L.push("");L.push("[Install]");if(fd("WantedBy"))L.push("WantedBy="+fd("WantedBy"));["Also","Alias"].forEach(function(k){var v=fd(k);if(v)L.push(k+"="+v)});return L.join("\n")}
+function renderPreview(){var body=document.getElementById("previewBody");var config=generateConfig();if(!config.trim()){body.innerHTML="<span class=\"empty\">"+t("previewEmpty")+"</span>";return}var hl=config.split("\n").map(function(line){if(!line.trim())return"";if(line.startsWith("#"))return"<span class=\"com\">"+esc(line)+"</span>";if(line.startsWith("["))return"<span class=\"section\">"+esc(line)+"</span>";var idx=line.indexOf("=");if(idx>0){return"<span class=\"key\">"+esc(line.substring(0,idx))+"</span><span class=\"val\">"+esc(line.substring(idx))+"</span>"}return esc(line)}).join("\n");body.innerHTML=hl}
+function copyPreview(){var text=generateConfig();navigator.clipboard.writeText(text).then(function(){showToast(t("toastCopied"))})["catch"](function(){var ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();showToast(t("toastCopied"))})}
+function downloadPreview(){var text=generateConfig();var blob=new Blob([text],{type:"text/plain;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);var name=(fd("Description")||"myservice").replace(/\s+/g,"_").toLowerCase();a.download=name+".service";a.click();URL.revokeObjectURL(a.href);showToast(t("toastDownloaded"))}
+function resetAll(){if(!confirm(t("confirmReset")))return;Object.keys(formData).forEach(function(k){if(Array.isArray(formData[k])){formData[k]=[{key:"",value:""}]}else if(typeof formData[k]==="boolean"){formData[k]=false}else{formData[k]=""}});formData.Description="My Service";formData.After="network.target";formData.Type="simple";formData.Restart="on-failure";formData.RestartSec="5";formData.TasksMax="infinity";formData.WantedBy="multi-user.target";formData.StartLimitAction="none";renderPanels();showToast(t("toastReset"))}
+function copyCmd(btn,cmd){navigator.clipboard.writeText(cmd).then(function(){btn.textContent=t("btnCopied");btn.classList.add("copied");setTimeout(function(){btn.textContent=t("btnCopyCmd");btn.classList.remove("copied")},1500)})["catch"](function(){showToast(t("toastCopied"))})}
+function showToast(msg){var el=document.getElementById("toast");el.textContent=msg;el.classList.add("show");clearTimeout(el._t);el._t=setTimeout(function(){el.classList.remove("show")},2500)}
+function showDeploy(){document.getElementById("deployOverlay").classList.add("show");document.getElementById("deployModal").classList.add("show");updateDeployCmd()}
+function closeDeploy(){document.getElementById("deployOverlay").classList.remove("show");document.getElementById("deployModal").classList.remove("show")}
+function updateDeployCmd(){var name=(fd("Description")||"myservice").replace(/\s+/g,"_").toLowerCase();var config=generateConfig();var start=document.getElementById("deployStartToggle").checked;var enable=document.getElementById("deployEnableToggle").checked;var lines=[];lines.push("# Deploy "+name+".service");lines.push("sudo tee /etc/systemd/system/"+name+".service > /dev/null << 'SERVICEFILE'");lines.push(config);lines.push("SERVICEFILE");lines.push("sudo systemctl daemon-reload");if(start)lines.push("sudo systemctl start "+name);if(enable)lines.push("sudo systemctl enable "+name);lines.push("");lines.push("sudo systemctl status "+name+" --no-pager");document.getElementById("deployCmdBox").textContent=lines.join("\n")}
+function copyDeployCmd(){var text=document.getElementById("deployCmdBox").textContent;navigator.clipboard.writeText(text).then(function(){var btn=document.getElementById("deployCopyBtn");btn.textContent=t("btnDeployCopied");setTimeout(function(){btn.textContent=t("btnDeployCopy")},2000)})["catch"](function(){showToast(t("toastCopied"))})}
+applyLang();renderSidebar();renderPanels();
+
+</script></body>
+</html>
+
+
+
+
+
+
